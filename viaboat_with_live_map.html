@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>ViaBoat — Boat Service + Live Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    :root{
+      --bg: #0b1220; --line: rgba(255,255,255,.08);
+      --text:#F9FAFB; --muted:#9CA3AF; --brand:#3B82F6; --brand2:#60A5FA; --card:#0e1626; --surface:#0c1322;
+    }
+    :root[data-theme='light']{
+      --bg:#f7fafc; --line: rgba(0,0,0,.12);
+      --text:#0f172a; --muted:#475569; --brand:#2563EB; --brand2:#60A5FA; --card:#ffffff; --surface:#f1f5f9;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,var(--bg) 0%, var(--bg) 40%, #0f172a 100%);color:var(--text);
+         font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; transition:background .2s,color .2s}
+    .wrap{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .app{width:100%;max-width:430px;background:rgba(255,255,255,.06);border:1px solid var(--line);
+         border-radius:24px;overflow:hidden;backdrop-filter:blur(8px)}
+    .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+         background:rgba(0,0,0,.10);border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:10px}
+    .logo{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+          display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+    .subtitle{font-size:11px;color:var(--muted);line-height:1.1}
+    .title{font-size:16px;font-weight:600}
+    .btn{appearance:none;border:1px solid var(--line);background:transparent;color:var(--text);
+         padding:10px 14px;border-radius:999px;cursor:pointer;transition:.2s}
+    .btn:hover{background:rgba(255,255,255,.06)}
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:white}
+    .btn.secondary{background:rgba(255,255,255,.08)}
+    .btn.block{width:100%}
+    .iconbtn{padding:8px 10px;border-radius:14px}
+    .main{padding:16px 16px 96px}
+    .row{display:grid;gap:6px}
+    .label{font-size:12px;color:var(--muted)}
+    input,select{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--line);
+                 background:#0d1424;color:var(--text)}
+    :root[data-theme='light'] input,:root[data-theme='light'] select{background:#eef2f7;color:#0f172a}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
+    .routes{display:grid;gap:10px}
+    .route{display:flex;align-items:center;gap:12px;justify-content:space-between;background:var(--surface);border:1px solid var(--line);
+           padding:12px;border-radius:16px}
+    .muted{color:var(--muted);font-size:12px}
+    .kpi{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);
+         border-radius:16px;padding:10px 12px}
+    .bottom{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;
+            background:linear-gradient(180deg,rgba(11,18,32,0),rgba(11,18,32,.4));padding:12px}
+    .dock{width:100%;max-width:430px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:18px;
+          display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:6px;backdrop-filter:blur(8px)}
+    .tab{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:12px;cursor:pointer}
+    .tab.active{background:var(--brand);color:white}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    table{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    th, td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;font-size:14px}
+    th{background:var(--surface);color:#d1d5db}
+    :root[data-theme='light'] th{color:#334155}
+    #map{height:220px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+    .chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="app">
+    <div class="bar">
+      <div class="brand">
+        <div class="logo">⛴️</div>
+        <div>
+          <div class="title">ViaBoat</div>
+          <div class="subtitle">Boat Service</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="langSelect" class="btn iconbtn">
+          <option value="en">EN</option>
+          <option value="zh">中文</option>
+          <option value="th">TH</option>
+        </select>
+        <button id="themeBtn" class="btn iconbtn" title="Theme">🌓</button>
+      </div>
+    </div>
+    <div id="root" class="main"></div>
+  </div>
+</div>
+
+<!-- React UMD -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+ integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+const {useState, useMemo, useEffect, useRef} = React;
+
+// i18n
+const i18n = {
+  en: { home_map:"Map of Chao Phraya (interactive)", find_route:"Find Route", track_trip:"Track Trip",
+        from:"From", to:"To", search_routes:"Search Routes", clear:"Clear",
+        minutes:"min", time_tickets:"Time & Tickets", departure_time:"Departure Time", tickets:"Tickets",
+        fare_type:"Fare Type", adult:"Adult", child:"Child", senior:"Senior",
+        total:"Total", pay_mock:"Pay (Mock)", confirm_payment:"Confirm Payment", my_ticket:"My Ticket",
+        scan_pier:"Scan at Pier", show_qr:"Show this QR to staff", depart:"Depart", qty:"Qty", track:"Track Trip",
+        status:"Trip Status", arriving_in:"Boat arriving in", minutes_short:"min", seconds_short:"sec", back_home:"Back to Home",
+        help:"Help", faq:"FAQ: Where to scan ticket? — At pier gate/inspection point.", contact:"Contact Staff",
+        timetable:"Timetable", view_timetable:"View Timetable", next_departures:"Next Departures",
+        select_route_first:"Select a route first to view its timetable.", recent:"Recent routes", back:"Back",
+        weekday:"Weekday", weekend:"Weekend", currency:"฿", currency_zh:"¥",
+        use_location:"Use current location" },
+  zh: { home_map:"湄南河互动地图", find_route:"查找路线", track_trip:"行程追踪",
+        from:"起点", to:"终点", search_routes:"搜索路线", clear:"清空",
+        minutes:"分钟", time_tickets:"时间与车票", departure_time:"发船时间", tickets:"张数",
+        fare_type:"票种", adult:"成人", child:"儿童", senior:"长者",
+        total:"合计", pay_mock:"模拟支付", confirm_payment:"确认支付", my_ticket:"我的车票",
+        scan_pier:"在码头扫描", show_qr:"向工作人员出示此二维码", depart:"出发", qty:"数量", track:"行程追踪",
+        status:"行程状态", arriving_in:"船只将在", minutes_short:"分", seconds_short:"秒", back_home:"返回首页",
+        help:"帮助", faq:"常见问题：在哪儿扫码？— 在码头入口/验票点。", contact:"联系工作人员",
+        timetable:"时刻表", view_timetable:"查看时刻表", next_departures:"下一班次",
+        select_route_first:"请先选择路线以查看时刻表。", recent:"最近路线", back:"返回",
+        weekday:"工作日", weekend:"周末", currency:"฿", currency_zh:"¥",
+        use_location:"使用当前位置" },
+  th: { home_map:"แผนที่แม่น้ำเจ้าพระยา (เลื่อนได้)", find_route:"ค้นหาเส้นทาง", track_trip:"ติดตามการเดินทาง",
+        from:"ต้นทาง", to:"ปลายทาง", search_routes:"หาเส้นทาง", clear:"ล้างค่า",
+        minutes:"นาที", time_tickets:"เวลา & ตั๋ว", departure_time:"เวลาออก", tickets:"จำนวนตั๋ว",
+        fare_type:"ประเภทตั๋ว", adult:"ผู้ใหญ่", child:"เด็ก", senior:"ผู้สูงอายุ",
+        total:"รวม", pay_mock:"ชำระเงิน (จำลอง)", confirm_payment:"ยืนยันการชำระเงิน", my_ticket:"ตั๋วของฉัน",
+        scan_pier:"สแกนที่ท่าเรือ", show_qr:"แสดงคิวอาร์นี้ให้เจ้าหน้าที่", depart:"ออกเดินทาง", qty:"จำนวน", track:"ติดตามการเดินทาง",
+        status:"สถานะการเดินทาง", arriving_in:"เรือจะมาถึงใน", minutes_short:"นาที", seconds_short:"วิ", back_home:"กลับหน้าแรก",
+        help:"ช่วยเหลือ", faq:"คำถามที่พบบ่อย: สแกนตั๋วตรงไหน? — ที่ประตูเข้า/จุดตรวจตั๋วของท่าเรือ", contact:"ติดต่อเจ้าหน้าที่",
+        timetable:"ตารางเวลา", view_timetable:"ดูตารางเวลา", next_departures:"รอบถัดไป",
+        select_route_first:"โปรดเลือกเส้นทางก่อนเพื่อดูตารางเวลา", recent:"เส้นทางล่าสุด", back:"ย้อนกลับ",
+        weekday:"วันธรรมดา", weekend:"สุดสัปดาห์", currency:"฿", currency_zh:"¥",
+        use_location:"ใช้ตำแหน่งปัจจุบัน" }
+};
+
+const routesData = [
+  { id:'r1', from:'Tha Chang (N9)', to:'Asiatique Pier', duration:25, price:80 },
+  { id:'r2', from:'Sathorn (CEN)', to:'ICONSIAM', duration:12, price:40 },
+  { id:'r3', from:'Tha Maharaj', to:'Phra Arthit (N13)', duration:8, price:30 },
+];
+// Approx pier coords (Bangkok, rough)
+const piers = {
+  "Tha Chang (N9)": {lat:13.7516, lng:100.4910},
+  "Asiatique Pier": {lat:13.7046, lng:100.5084},
+  "Sathorn (CEN)": {lat:13.7180, lng:100.5163},
+  "ICONSIAM": {lat:13.7260, lng:100.5109},
+  "Tha Maharaj": {lat:13.7536, lng:100.4875},
+  "Phra Arthit (N13)": {lat:13.7642, lng:100.4945}
+};
+
+function makeTimetable(routeId, day=(new Date()).getDay()){
+  const step = (day===0 || day===6) ? 20 : 15;
+  const startH = 9, endH = 20;
+  const times = [];
+  for(let h=startH; h<=endH; h++){
+    for(let m=0; m<60; m+=step){
+      const hh = String(h).padStart(2,'0');
+      const mm = String(m).padStart(2,'0');
+      times.push(`${hh}:${mm}`);
+    }
+  }
+  return times.map(t => ({ time: t, routeId }));
+}
+
+function drawQR(canvas, text){
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,size,size);
+  const N = 21; const block = Math.floor(size / N);
+  let h=0; for(let i=0;i<text.length;i++){ h = (h*31 + text.charCodeAt(i)) & 0xffffffff; }
+  for(let y=0;y<N;y++){
+    for(let x=0;x<N;x++){
+      const bit = (h >> ((x+y)%31)) & 1;
+      ctx.fillStyle = bit ? '#111827' : '#e5e7eb';
+      ctx.fillRect(x*block, y*block, block-1, block-1);
+    }
+  }
+  ctx.fillStyle='#111827';
+  const sq = (ox,oy)=>{ ctx.fillRect(ox,oy,block*7,block*7);
+    ctx.fillStyle='#fff'; ctx.fillRect(ox+block,oy+block,block*5,block*5);
+    ctx.fillStyle='#111827'; ctx.fillRect(ox+block*2,oy+block*2,block*3,block*3); ctx.fillStyle='#111827';};
+  sq(block,block); sq((N-8)*block,block); sq(block,(N-8)*block);
+}
+
+function Shell({children, tab, setTab}){
+  return React.createElement(React.Fragment,null,
+    children,
+    React.createElement('div',{className:'bottom'},
+      React.createElement('div',{className:'dock'},
+        ['home','search','routes','timetable','help'].map(id =>
+          React.createElement('div',{
+            key:id,
+            className:'tab '+(id===tab?'active':''),
+            onClick:()=>setTab(id)}, id==='home'?'⌂': id==='search'?'🔎': id==='routes'?'🧭': id==='timetable'?'🗓️':'❓'
+          )
+        )
+      )
+    )
+  );
+}
+
+function MapCard({t}){
+  const mapRef = useRef(null);
+  const mapObj = useRef(null);
+  useEffect(()=>{
+    if(!mapRef.current) return;
+    if(mapObj.current) return; // init once
+    const map = L.map(mapRef.current, { zoomControl: false, attributionControl: true }).setView([13.7367, 100.5231], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    // Markers for piers
+    Object.entries(piers).forEach(([name,coord])=>{
+      L.marker([coord.lat,coord.lng]).addTo(map).bindPopup(name);
+    });
+    // Sample polylines (routes)
+    const makeLine = (a,b,color='#3B82F6') => L.polyline([ [a.lat,a.lng],[b.lat,b.lng] ], {color, weight:4, opacity:0.8}).addTo(map);
+    makeLine(piers["Sathorn (CEN)"], piers["ICONSIAM"], '#22c55e');
+    makeLine(piers["Tha Chang (N9)"], piers["Asiatique Pier"], '#3b82f6');
+    makeLine(piers["Tha Maharaj"], piers["Phra Arthit (N13)"], '#ef4444');
+    // Fit bounds
+    const group = L.featureGroup([
+      L.marker([13.7367, 100.5231])
+    ]);
+    map.fitBounds([
+      [13.68,100.47],[13.78,100.55]
+    ], {padding:[10,10]});
+    // Use geolocation if possible (HTTPS required on iOS)
+    const btn = document.getElementById('locBtn');
+    if(btn){
+      btn.onclick = ()=>{
+        if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+        navigator.geolocation.getCurrentPosition(pos=>{
+          const {latitude, longitude} = pos.coords;
+          L.marker([latitude, longitude]).addTo(map).bindPopup('You are here').openPopup();
+          map.setView([latitude, longitude], 14);
+        }, err=>{
+          alert('Location error: '+err.message);
+        }, {enableHighAccuracy:true, timeout:5000});
+      };
+    }
+    mapObj.current = map;
+  },[]);
+  return React.createElement('div',{className:'card'},
+    React.createElement('div',{id:'map'}),
+    React.createElement('div',{style:{display:'flex',gap:'8px',marginTop:'10px'}},
+      React.createElement('button',{id:'locBtn',className:'btn secondary',style:{flex:1}},'📍 ', t.use_location),
+      React.createElement('span',{className:'chip',style:{alignSelf:'center'}}, t.home_map || 'Map')
+    )
+  );
+}
+
+function App(){
+  // language & theme
+  const savedLang = localStorage.getItem('vb_lang');
+  const [lang,setLang] = useState(savedLang || 'en');
+  const t = i18n[lang];
+  useEffect(()=>{
+    if(!savedLang){
+      const sys = (navigator.language||'en').toLowerCase();
+      if(sys.startsWith('th')) setLang('th');
+      else if(sys.startsWith('zh')) setLang('zh');
+    }
+  },[]);
+  useEffect(()=>{ localStorage.setItem('vb_lang', lang); const sel=document.getElementById('langSelect'); if(sel) sel.value=lang; },[lang]);
+
+  const savedTheme = localStorage.getItem('vb_theme') || 'dark';
+  const [theme,setTheme] = useState(savedTheme);
+  useEffect(()=>{
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('vb_theme', theme);
+  },[theme]);
+  useEffect(()=>{
+    const btn=document.getElementById('themeBtn');
+    if(btn){ btn.onclick = ()=> setTheme(th => th==='dark'?'light':'dark'); }
+    const sel=document.getElementById('langSelect');
+    if(sel){ sel.onchange = e=> setLang(e.target.value); sel.value=lang; }
+  },[]);
+
+  const [tab,setTab]=useState('home');
+  const [screen,setScreen]=useState('home');
+  const [route,setRoute]=useState(null);
+  const [time,setTime]=useState('10:00');
+  const [tickets,setTickets]=useState(1);
+  const [fareType,setFareType]=useState('adult');
+  const [paid,setPaid]=useState(false);
+  const ticketId = useMemo(()=> 'VB'+Math.floor(Math.random()*999999), [paid]);
+  const [eta,setEta]=useState(300);
+
+  useEffect(()=>{
+    if(tab==='home') setScreen('home');
+    if(tab==='search') setScreen('search');
+    if(tab==='routes') setScreen('routes');
+    if(tab==='timetable') setScreen('timetable');
+    if(tab==='help') setScreen('help');
+  },[tab]);
+
+  useEffect(()=>{
+    if(screen==='status'){
+      setEta(300);
+      const iv=setInterval(()=> setEta(e=> Math.max(e-1,0)), 1000);
+      return ()=> clearInterval(iv);
+    }
+  },[screen]);
+
+  const currency = lang==='zh' ? t.currency_zh : t.currency;
+  const timetable = useMemo(()=> route ? makeTimetable(route.id) : [], [route]);
+
+  return React.createElement(Shell,{tab,setTab},
+    screen==='home' && React.createElement(React.Fragment,null,
+      React.createElement(MapCard,{t}),
+      React.createElement('div',{className:'card'},
+        React.createElement('div',{className:'grid2'},
+          React.createElement('button',{className:'btn primary',onClick:()=>setTab('search')},'🔎 ', t.find_route),
+          React.createElement('button',{className:'btn secondary',onClick:()=>setScreen('status')},'📍 ', t.track_trip)
+        )
+      )
+    ),
+
+    screen==='search' && React.createElement(React.Fragment,null,
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{className:'label'}, t.from),
+        React.createElement('input',{placeholder:'e.g., Sathorn (CEN)'})
+      ),
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{className:'label'}, t.to),
+        React.createElement('input',{placeholder:'e.g., ICONSIAM'})
+      ),
+      React.createElement('div',{className:'grid2'},
+        React.createElement('button',{className:'btn primary',onClick:()=>setTab('routes')},'🚤 ', t.search_routes),
+        React.createElement('button',{className:'btn',onClick:()=>{}}, t.clear)
+      )
+    ),
+
+    screen==='routes' && React.createElement('div',{className:'routes'},
+      ...routesData.map(r => React.createElement('div',{key:r.id,className:'route'},
+        React.createElement('div',null,
+          React.createElement('div',{style:{fontWeight:600}}, r.from,' → ',r.to),
+          React.createElement('div',{className:'muted'}, r.duration,' ', t.minutes, ' • ', currency, r.price)
+        ),
+        React.createElement('div', {style:{display:'grid',gap:'8px'}},
+          React.createElement('button',{className:'btn primary',onClick:()=>{ setRoute(r); setTab('timetable'); }}, t.view_timetable),
+          React.createElement('button',{className:'btn',onClick:()=>{ setRoute(r); setScreen('schedule'); }}, t.time_tickets)
+        )
+      ))
+    ),
+
+    screen==='timetable' && React.createElement(React.Fragment,null,
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{style:{fontWeight:600, fontSize:'16px'}}, '🗓️ ', t.timetable, ' ',
+          React.createElement('span',{className:'chip'}, ((new Date().getDay()===0||new Date().getDay()===6)?t.weekend:t.weekday))
+        )
+      ),
+      !route && React.createElement('div',{className:'muted'}, t.select_route_first),
+      route && React.createElement(React.Fragment,null,
+        React.createElement('div',{className:'card', style:{marginBottom:'10px'}},
+          React.createElement('div',{style:{fontWeight:600}}, route.from,' → ',route.to),
+          React.createElement('div',{className:'muted'}, t.next_departures)
+        ),
+        React.createElement('table',null,
+          React.createElement('thead',null,
+            React.createElement('tr',null,
+              React.createElement('th',null, t.departure_time),
+              React.createElement('th',null, t.total),
+              React.createElement('th',null, '')
+            )
+          ),
+          React.createElement('tbody',null,
+            ...timetable.slice(0,12).map((row,i)=> React.createElement('tr',{key:row.time},
+              React.createElement('td',null,row.time),
+              React.createElement('td',null, currency, ' ', route.price),
+              React.createElement('td',null,
+                React.createElement('button',{className:'btn primary', onClick:()=>{ setTime(row.time); setScreen('pay'); }}, t.pay_mock)
+              )
+            ))
+          )
+        )
+      )
+    ),
+
+    screen==='schedule' && route && React.createElement(React.Fragment,null,
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{className:'label'}, t.departure_time),
+        React.createElement('select',{value:time,onChange:e=>setTime(e.target.value)},
+          ...timetable.map(s=>React.createElement('option',{key:s.time,value:s.time},s.time))
+        )
+      ),
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{className:'label'}, t.tickets),
+        React.createElement('select',{value:String(tickets),onChange:e=>setTickets(Number(e.target.value))},
+          ...[1,2,3,4,5].map(n=>React.createElement('option',{key:n,value:String(n)},n))
+        )
+      ),
+      React.createElement('div',{className:'row'},
+        React.createElement('div',{className:'label'}, t.fare_type),
+        React.createElement('select',{value:fareType,onChange:e=>setFareType(e.target.value)},
+          React.createElement('option',{value:'adult'}, t.adult),
+          React.createElement('option',{value:'child'}, t.child),
+          React.createElement('option',{value:'senior'}, t.senior),
+        )
+      ),
+      React.createElement('div',{className:'kpi'},
+        React.createElement('div',{className:'muted'}, t.total),
+        React.createElement('div',{style:{fontWeight:700}},
+          currency,' ',
+          (fareType==='child'? routesData.find(x=>x.id===route.id).price*0.5 : fareType==='senior'? routesData.find(x=>x.id===route.id).price*0.8 : routesData.find(x=>x.id===route.id).price) * tickets
+        )
+      ),
+      React.createElement('button',{className:'btn primary block',onClick:()=>setScreen('pay')},'💳 ', t.pay_mock)
+    ),
+
+    screen==='pay' && route && React.createElement(React.Fragment,null,
+      React.createElement('div',{className:'card'},
+        React.createElement('div',{style:{fontWeight:600,marginBottom:6}}, route.from,' → ',route.to),
+        React.createElement('div',{className:'muted'},
+          t.depart,': ',time,' • ',t.qty,': ',tickets,' • ',t.total,': ',
+          currency,' ',
+          (fareType==='child'? route.price*0.5 : fareType==='senior'? route.price*0.8 : route.price) * tickets
+        )
+      ),
+      React.createElement('button',{className:'btn primary block',onClick:()=>{ setPaid(true); setScreen('ticket'); }},'✅ ', t.confirm_payment)
+    ),
+
+    screen==='ticket' && paid && React.createElement(Ticket,{t, route, time, tickets, ticketId, setScreen}),
+
+    screen==='status' && React.createElement(Status,{t, eta, back:()=>setTab('home')}),
+
+    screen==='help' && React.createElement('div',{className:'routes'},
+      React.createElement('div',{className:'card'}, t.faq),
+      React.createElement('button',{className:'btn'},'☎️ ', t.contact)
+    )
+  );
+}
+
+function Ticket({t, route, time, tickets, ticketId, setScreen}){
+  const canvasRef = useRef(null);
+  useEffect(()=>{ if(canvasRef.current){ drawQR(canvasRef.current, String(ticketId)); } },[ticketId]);
+  return React.createElement(React.Fragment,null,
+    React.createElement('div',{className:'route'},
+      React.createElement('div',null,
+        React.createElement('div',{style:{fontWeight:600}}, t.scan_pier),
+        React.createElement('div',{className:'muted'}, t.show_qr)
+      ),
+      React.createElement('canvas',{ref:canvasRef,width:112,height:112})
+    ),
+    React.createElement('div',{className:'card',style:{marginTop:10}},
+      React.createElement('div',{style:{fontWeight:600}}, route.from,' → ',route.to),
+      React.createElement('div',{className:'muted'}, t.depart,': ',time,' • ',t.qty,': ',tickets,' • ID: ', ticketId)
+    ),
+    React.createElement('button',{className:'btn secondary block',onClick:()=>setScreen('status')},'📍 ', t.track)
+  );
+}
+
+function Status({t, eta, back}){
+  const mm = String(Math.floor(eta/60)).padStart(2,'0');
+  const ss = String(eta%60).padStart(2,'0');
+  return React.createElement('div',null,
+    React.createElement('div',{className:'card'}, `${t.arriving_in} ${mm}:${ss}`),
+    React.createElement('div',{style:{height:10}}),
+    React.createElement('button',{className:'btn block',onClick:back},'🏠 ', t.back_home)
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>
